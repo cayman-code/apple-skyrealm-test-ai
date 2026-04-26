@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="IsoWorld">
+  <meta name="theme-color" content="#1a1a2e">
+  <link rel="manifest" href="manifest.json">
+  <title>IsoWorld</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; user-select: none; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #0d0d1a; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+
+    #canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    /* HUD */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0;
+      padding: env(safe-area-inset-top, 12px) 16px 12px;
+      display: flex; align-items: flex-start; justify-content: space-between;
+      pointer-events: none; z-index: 10;
+    }
+    .hud-panel {
+      background: rgba(10,10,25,0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 8px 14px;
+      pointer-events: all;
+    }
+    .hud-title { font-size: 17px; font-weight: 800; color: #fff; letter-spacing: -0.5px; }
+    .hud-sub { font-size: 11px; color: rgba(255,255,255,0.4); margin-top: 1px; }
+
+    .hud-stats { display: flex; gap: 12px; }
+    .stat { display: flex; align-items: center; gap: 5px; }
+    .stat-icon { font-size: 15px; }
+    .stat-val { font-size: 13px; font-weight: 700; color: #fff; }
+    .stat-label { font-size: 10px; color: rgba(255,255,255,0.4); }
+
+    /* TOOLBAR */
+    #toolbar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      z-index: 10;
+    }
+    .tool-btn {
+      width: 56px; height: 56px;
+      background: rgba(10,10,25,0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 2px; cursor: pointer;
+      transition: all 0.15s;
+    }
+    .tool-btn:active { transform: scale(0.9); opacity: 0.7; }
+    .tool-btn.active {
+      background: rgba(120,80,255,0.35);
+      border-color: rgba(120,80,255,0.7);
+      box-shadow: 0 0 16px rgba(120,80,255,0.3);
+    }
+    .tool-icon { font-size: 22px; }
+    .tool-label { font-size: 9px; color: rgba(255,255,255,0.5); font-weight: 600; }
+    .tool-btn.active .tool-label { color: rgba(160,130,255,0.9); }
+
+    /* DPAD */
+    #dpad {
+      position: fixed; bottom: calc(100px + env(safe-area-inset-bottom, 0px)); left: 20px;
+      width: 130px; height: 130px;
+      z-index: 10;
+    }
+    .dp-btn {
+      position: absolute;
+      width: 44px; height: 44px;
+      background: rgba(10,10,25,0.72);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; cursor: pointer;
+      transition: all 0.1s;
+    }
+    .dp-btn:active, .dp-btn.pressed { background: rgba(120,80,255,0.4); transform: scale(0.92); }
+    #dp-up    { top: 0;   left: 43px; }
+    #dp-down  { bottom: 0; left: 43px; }
+    #dp-left  { left: 0;  top: 43px; }
+    #dp-right { right: 0; top: 43px; }
+
+    /* TOOLTIP */
+    #tooltip {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      background: rgba(10,10,25,0.9);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px; padding: 16px 20px;
+      font-size: 14px; color: #fff; text-align: center;
+      pointer-events: none; z-index: 20;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    #tooltip.show { opacity: 1; }
+
+    /* MINIMAP */
+    #minimap {
+      position: fixed; top: 80px; right: 16px;
+      width: 90px; height: 90px;
+      background: rgba(10,10,25,0.72);
+      backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 14px; overflow: hidden;
+      z-index: 10;
+    }
+    #minimap canvas { width: 100%; height: 100%; }
+
+    /* BUILD MENU */
+    #build-menu {
+      position: fixed; bottom: calc(90px + env(safe-area-inset-bottom,0px)); left: 50%;
+      transform: translateX(-50%);
+      background: rgba(10,10,25,0.85);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px; padding: 12px;
+      display: none; gap: 10px; flex-wrap: wrap; justify-content: center;
+      max-width: 300px; z-index: 15;
+    }
+    #build-menu.open { display: flex; animation: popUp 0.2s cubic-bezier(.4,0,.2,1); }
+    @keyframes popUp { from { opacity:0; transform: translateX(-50%) translateY(10px); } to { opacity:1; transform: translateX(-50%) translateY(0); } }
+    .build-item {
+      width: 60px; height: 60px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 3px; cursor: pointer; transition: all 0.15s;
+    }
+    .build-item:active { transform: scale(0.9); background: rgba(120,80,255,0.3); }
+    .build-item.selected { border-color: rgba(120,80,255,0.8); background: rgba(120,80,255,0.2); }
+    .build-icon { font-size: 24px; }
+    .build-label { font-size: 9px; color: rgba(255,255,255,0.5); font-weight: 600; text-align: center; }
+  </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-panel">
+    <div class="hud-title">🌍 IsoWorld</div>
+    <div class="hud-sub" id="hud-pos">0, 0</div>
+  </div>
+  <div class="hud-panel hud-stats">
+    <div class="stat">
+      <span class="stat-icon">🪵</span>
+      <div><div class="stat-val" id="res-wood">0</div><div class="stat-label">Дерево</div></div>
+    </div>
+    <div class="stat">
+      <span class="stat-icon">🪨</span>
+      <div><div class="stat-val" id="res-stone">0</div><div class="stat-label">Камень</div></div>
+    </div>
+    <div class="stat">
+      <span class="stat-icon">🌾</span>
+      <div><div class="stat-val" id="res-food">0</div><div class="stat-label">Еда</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- MINIMAP -->
+<div id="minimap"><canvas id="mm-canvas" width="90" height="90"></canvas></div>
+
+<!-- DPAD -->
+<div id="dpad">
+  <div class="dp-btn" id="dp-up">▲</div>
+  <div class="dp-btn" id="dp-left">◀</div>
+  <div class="dp-btn" id="dp-right">▶</div>
+  <div class="dp-btn" id="dp-down">▼</div>
+</div>
+
+<!-- BUILD MENU -->
+<div id="build-menu">
+  <div class="build-item" data-build="house" onclick="selectBuild('house')">
+    <span class="build-icon">🏠</span><span class="build-label">Дом</span>
+  </div>
+  <div class="build-item" data-build="farm" onclick="selectBuild('farm')">
+    <span class="build-icon">🌾</span><span class="build-label">Ферма</span>
+  </div>
+  <div class="build-item" data-build="mine" onclick="selectBuild('mine')">
+    <span class="build-icon">⛏️</span><span class="build-label">Шахта</span>
+  </div>
+  <div class="build-item" data-build="tower" onclick="selectBuild('tower')">
+    <span class="build-icon">🗼</span><span class="build-label">Башня</span>
+  </div>
+  <div class="build-item" data-build="market" onclick="selectBuild('market')">
+    <span class="build-icon">🏪</span><span class="build-label">Рынок</span>
+  </div>
+  <div class="build-item" data-build="camp" onclick="selectBuild('camp')">
+    <span class="build-icon">🏕️</span><span class="build-label">Лагерь</span>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <div class="tool-btn active" id="tool-move" onclick="setTool('move')">
+    <span class="tool-icon">🚶</span>
+    <span class="tool-label">Ходить</span>
+  </div>
+  <div class="tool-btn" id="tool-build" onclick="setTool('build')">
+    <span class="tool-icon">🔨</span>
+    <span class="tool-label">Строить</span>
+  </div>
+  <div class="tool-btn" id="tool-gather" onclick="setTool('gather')">
+    <span class="tool-icon">⛏️</span>
+    <span class="tool-label">Добывать</span>
+  </div>
+  <div class="tool-btn" id="tool-info" onclick="setTool('info')">
+    <span class="tool-icon">🗺️</span>
+    <span class="tool-label">Карта</span>
+  </div>
+</div>
+
+<div id="tooltip"></div>
+
+<script>
+// ===== CONFIG =====
+const TILE_W = 64, TILE_H = 32;
+const MAP_W = 40, MAP_H = 40;
+const SAVE_KEY = 'isoworld_v1';
+
+// ===== CANVAS SETUP =====
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const mmCanvas = document.getElementById('mm-canvas');
+const mmCtx = mmCanvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth * window.devicePixelRatio;
+  canvas.height = window.innerHeight * window.devicePixelRatio;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+window.addEventListener('resize', () => { resize(); render(); });
+resize();
+
+// ===== TILE TYPES =====
+const TILES = {
+  grass:  { color: '#4a7c45', top: '#5a9452', label: 'Трава' },
+  dirt:   { color: '#8b6548', top: '#a07050', label: 'Земля' },
+  water:  { color: '#2a6090', top: '#3a80b0', label: 'Вода' },
+  sand:   { color: '#c8a84b', top: '#d4b85a', label: 'Песок' },
+  rock:   { color: '#666', top: '#888', label: 'Скала' },
+  snow:   { color: '#c8d8e8', top: '#e0eef8', label: 'Снег' },
+  forest: { color: '#2d5a27', top: '#3a7233', label: 'Лес' },
+  path:   { color: '#a09060', top: '#b8a870', label: 'Тропа' },
+};
+
+// ===== OBJECTS =====
+const OBJECTS = {
+  tree:   { emoji: '🌲', resource: 'wood',  amount: 3, label: 'Дерево' },
+  rock:   { emoji: '🪨', resource: 'stone', amount: 2, label: 'Камень' },
+  berry:  { emoji: '🍓', resource: 'food',  amount: 2, label: 'Ягоды' },
+  flower: { emoji: '🌸', resource: null,    amount: 0, label: 'Цветок' },
+  mushroom:{ emoji: '🍄', resource: 'food', amount: 1, label: 'Гриб' },
+  cactus: { emoji: '🌵', resource: null,    amount: 0, label: 'Кактус' },
+  pine:   { emoji: '🌳', resource: 'wood',  amount: 2, label: 'Сосна' },
+};
+
+const BUILDINGS = {
+  house:  { emoji: '🏠', label: 'Дом' },
+  farm:   { emoji: '🌾', label: 'Ферма' },
+  mine:   { emoji: '⛏️', label: 'Шахта' },
+  tower:  { emoji: '🗼', label: 'Башня' },
+  market: { emoji: '🏪', label: 'Рынок' },
+  camp:   { emoji: '🏕️', label: 'Лагерь' },
+};
+
+// ===== MAP GENERATION =====
+function noise(x, y, seed) {
+  const n = Math.sin(x * 127.1 + y * 311.7 + seed * 74.3) * 43758.5453;
+  return n - Math.floor(n);
+}
+function smoothNoise(x, y, seed) {
+  let v = 0, amp = 1, freq = 1, max = 0;
+  for (let i = 0; i < 4; i++) {
+    v += noise(x * freq / 8, y * freq / 8, seed + i) * amp;
+    max += amp; amp *= 0.5; freq *= 2;
+  }
+  return v / max;
+}
+
+function generateMap() {
+  const seed = 42;
+  const map = [];
+  const objects = {};
+  for (let y = 0; y < MAP_H; y++) {
+    map[y] = [];
+    for (let x = 0; x < MAP_W; x++) {
+      const h = smoothNoise(x, y, seed);
+      const m = smoothNoise(x, y, seed + 10);
+      let type;
+      if (h < 0.28) type = 'water';
+      else if (h < 0.33) type = 'sand';
+      else if (h < 0.38) type = 'dirt';
+      else if (h > 0.75) type = 'rock';
+      else if (h > 0.68) type = 'snow';
+      else if (m > 0.65) type = 'forest';
+      else type = 'grass';
+      map[y][x] = type;
+
+      // place objects
+      const r = noise(x + 0.5, y + 0.5, seed + 99);
+      if (type === 'grass') {
+        if (r < 0.08) objects[`${x},${y}`] = 'tree';
+        else if (r < 0.12) objects[`${x},${y}`] = 'berry';
+        else if (r < 0.14) objects[`${x},${y}`] = 'flower';
+        else if (r < 0.16) objects[`${x},${y}`] = 'mushroom';
+      } else if (type === 'forest') {
+        if (r < 0.5) objects[`${x},${y}`] = 'pine';
+        else if (r < 0.6) objects[`${x},${y}`] = 'tree';
+      } else if (type === 'rock' || type === 'dirt') {
+        if (r < 0.12) objects[`${x},${y}`] = 'rock';
+      } else if (type === 'sand') {
+        if (r < 0.1) objects[`${x},${y}`] = 'cactus';
+      }
+    }
+  }
+  return { map, objects };
+}
+
+// ===== STATE =====
+function loadState() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch(e) {}
+  return null;
+}
+function saveState() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      player: G.player,
+      resources: G.resources,
+      buildings: G.buildings,
+      gatheredObjects: G.gatheredObjects,
+    }));
+  } catch(e) {}
+}
+
+const { map, objects: defaultObjects } = generateMap();
+const saved = loadState();
+
+const G = {
+  map,
+  objects: saved ? Object.assign({}, defaultObjects, {}) : defaultObjects,
+  buildings: saved ? saved.buildings : {},
+  gatheredObjects: saved ? saved.gatheredObjects : {},
+  player: saved ? saved.player : { x: 20, y: 20 },
+  resources: saved ? saved.resources : { wood: 0, stone: 0, food: 0 },
+  camera: { x: 0, y: 0 },
+  tool: 'move',
+  selectedBuild: 'house',
+  anim: { playerBob: 0, waterAnim: 0 },
+  particles: [],
+  moveQueue: [],
+  moving: false,
+};
+
+// remove gathered from objects
+if (saved && saved.gatheredObjects) {
+  for (const k of Object.keys(saved.gatheredObjects)) {
+    delete G.objects[k];
+  }
+}
+
+// ===== ISO UTILS =====
+function tileToScreen(tx, ty) {
+  const sw = window.innerWidth, sh = window.innerHeight;
+  const ox = sw / 2 - G.camera.x;
+  const oy = sh / 2 - G.camera.y;
+  return {
+    x: ox + (tx - ty) * TILE_W / 2,
+    y: oy + (tx + ty) * TILE_H / 2,
+  };
+}
+function screenToTile(sx, sy) {
+  const sw = window.innerWidth, sh = window.innerHeight;
+  const ox = sw / 2 - G.camera.x;
+  const oy = sh / 2 - G.camera.y;
+  const rx = sx - ox, ry = sy - oy;
+  return {
+    x: Math.round((rx / (TILE_W / 2) + ry / (TILE_H / 2)) / 2),
+    y: Math.round((ry / (TILE_H / 2) - rx / (TILE_W / 2)) / 2),
+  };
+}
+function targetCamera() {
+  const sp = tileToScreen(G.player.x, G.player.y);
+  G.camera.x += (sp.x - window.innerWidth / 2) * 0.12;
+  G.camera.y += (sp.y - window.innerHeight / 2) * 0.12;
+}
+
+// ===== DRAW TILE =====
+function drawTile(tx, ty, highlight) {
+  const type = G.map[ty] && G.map[ty][tx];
+  if (!type) return;
+  const t = TILES[type];
+  const { x, y } = tileToScreen(tx, ty);
+  const hw = TILE_W / 2, hh = TILE_H / 2;
+  const depth = 6;
+
+  // water animation
+  let yOff = 0;
+  if (type === 'water') {
+    yOff = Math.sin(G.anim.waterAnim + tx * 0.3 + ty * 0.5) * 1.5;
+  }
+
+  // top face
+  ctx.beginPath();
+  ctx.moveTo(x, y + yOff - depth);
+  ctx.lineTo(x + hw, y - hh + yOff - depth);
+  ctx.lineTo(x + hw * 2, y + yOff - depth);
+  ctx.lineTo(x + hw, y + hh + yOff - depth);
+  ctx.closePath();
+  ctx.fillStyle = highlight ? '#fff8' : t.top;
+  ctx.fill();
+  if (highlight) {
+    ctx.strokeStyle = 'rgba(255,220,80,0.9)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+
+  // left face
+  ctx.beginPath();
+  ctx.moveTo(x, y + yOff - depth);
+  ctx.lineTo(x + hw, y + hh + yOff - depth);
+  ctx.lineTo(x + hw, y + hh + yOff);
+  ctx.lineTo(x, y + yOff);
+  ctx.closePath();
+  ctx.fillStyle = type === 'water'
+    ? '#1a4f70'
+    : shadeColor(t.color, -30);
+  ctx.fill();
+
+  // right face
+  ctx.beginPath();
+  ctx.moveTo(x + hw, y + hh + yOff - depth);
+  ctx.lineTo(x + hw * 2, y + yOff - depth);
+  ctx.lineTo(x + hw * 2, y + yOff);
+  ctx.lineTo(x + hw, y + hh + yOff);
+  ctx.closePath();
+  ctx.fillStyle = type === 'water'
+    ? '#1d5880'
+    : shadeColor(t.color, -15);
+  ctx.fill();
+
+  // grid line subtle
+  ctx.beginPath();
+  ctx.moveTo(x, y + yOff - depth);
+  ctx.lineTo(x + hw, y - hh + yOff - depth);
+  ctx.lineTo(x + hw * 2, y + yOff - depth);
+  ctx.lineTo(x + hw, y + hh + yOff - depth);
+  ctx.closePath();
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 0.5;
+  ctx.stroke();
+}
+
+function shadeColor(hex, pct) {
+  let r = parseInt(hex.slice(1,3),16);
+  let g = parseInt(hex.slice(3,5),16);
+  let b = parseInt(hex.slice(5,7),16);
+  r = Math.max(0,Math.min(255, r + pct));
+  g = Math.max(0,Math.min(255, g + pct));
+  b = Math.max(0,Math.min(255, b + pct));
+  return `rgb(${r},${g},${b})`;
+}
+
+// ===== DRAW OBJECT =====
+function drawObject(tx, ty) {
+  const key = `${tx},${ty}`;
+  if (G.gatheredObjects[key]) return;
+  const obj = G.objects[key];
+  const bld = G.buildings[key];
+  if (!obj && !bld) return;
+
+  const { x, y } = tileToScreen(tx, ty);
+  const emoji = obj ? OBJECTS[obj].emoji : BUILDINGS[bld].emoji;
+  const size = 28;
+
+  const bob = (tx === G.player.x && ty === G.player.y) ? 0 :
+    Math.sin(G.anim.playerBob * 0.5 + tx * 1.1 + ty * 0.7) * 1.5;
+
+  ctx.font = `${size}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  // shadow
+  ctx.globalAlpha = 0.3;
+  ctx.filter = 'blur(3px)';
+  ctx.fillStyle = '#000';
+  ctx.fillText('⬤', x + TILE_W / 2, y + 2);
+  ctx.filter = 'none';
+  ctx.globalAlpha = 1;
+  ctx.fillText(emoji, x + TILE_W / 2, y - 4 + bob);
+}
+
+// ===== DRAW PLAYER =====
+function drawPlayer() {
+  const { x, y } = tileToScreen(G.player.x, G.player.y);
+  const bob = Math.sin(G.anim.playerBob) * 2;
+
+  // shadow
+  ctx.globalAlpha = 0.35;
+  ctx.filter = 'blur(4px)';
+  ctx.fillStyle = '#000';
+  ctx.beginPath();
+  ctx.ellipse(x + TILE_W / 2, y + 6, 14, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.filter = 'none';
+  ctx.globalAlpha = 1;
+
+  // glow ring
+  ctx.beginPath();
+  ctx.arc(x + TILE_W / 2, y - 8 + bob, 18, 0, Math.PI * 2);
+  const grd = ctx.createRadialGradient(x + TILE_W/2, y - 8 + bob, 4, x + TILE_W/2, y - 8 + bob, 18);
+  grd.addColorStop(0, 'rgba(120,80,255,0.25)');
+  grd.addColorStop(1, 'rgba(120,80,255,0)');
+  ctx.fillStyle = grd;
+  ctx.fill();
+
+  // player emoji
+  ctx.font = '30px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText('🧑', x + TILE_W / 2, y - 2 + bob);
+}
+
+// ===== DRAW PARTICLES =====
+function drawParticles() {
+  G.particles = G.particles.filter(p => p.life > 0);
+  for (const p of G.particles) {
+    ctx.globalAlpha = p.life / p.maxLife;
+    ctx.font = `${p.size}px serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText(p.emoji, p.x, p.y);
+    p.x += p.vx; p.y += p.vy; p.vy -= 0.3; p.life--;
+  }
+  ctx.globalAlpha = 1;
+}
+
+function spawnParticles(tx, ty, emoji) {
+  const { x, y } = tileToScreen(tx, ty);
+  for (let i = 0; i < 4; i++) {
+    G.particles.push({
+      x: x + TILE_W/2 + (Math.random()-0.5)*20,
+      y: y - 10,
+      vx: (Math.random()-0.5)*3,
+      vy: -(Math.random()*3 + 2),
+      emoji, size: 16 + Math.random()*8,
+      life: 35, maxLife: 35,
+    });
+  }
+}
+
+// ===== RENDER =====
+function render() {
+  const sw = window.innerWidth, sh = window.innerHeight;
+  ctx.clearRect(0, 0, sw, sh);
+
+  // sky gradient
+  const sky = ctx.createLinearGradient(0, 0, 0, sh);
+  sky.addColorStop(0, '#0d0d2a');
+  sky.addColorStop(1, '#1a2040');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, sw, sh);
+
+  // star dots
+  ctx.fillStyle = 'rgba(255,255,255,0.25)';
+  for (let i = 0; i < 60; i++) {
+    const sx = ((i * 137.508 + 50) % sw);
+    const sy = ((i * 91.3 + 20) % (sh * 0.5));
+    ctx.beginPath();
+    ctx.arc(sx, sy, 0.8, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // sort tiles for painter's algorithm
+  const tiles = [];
+  for (let y = 0; y < MAP_H; y++)
+    for (let x = 0; x < MAP_W; x++)
+      tiles.push({x, y, sort: x + y});
+  tiles.sort((a,b) => a.sort - b.sort);
+
+  // hover tile
+  let hoverTile = null;
+  if (G.lastMouse) {
+    const t = screenToTile(G.lastMouse.x, G.lastMouse.y);
+    if (t.x >= 0 && t.x < MAP_W && t.y >= 0 && t.y < MAP_H) hoverTile = t;
+  }
+
+  for (const t of tiles) {
+    const isHover = hoverTile && hoverTile.x === t.x && hoverTile.y === t.y && G.tool !== 'move';
+    drawTile(t.x, t.y, isHover);
+    drawObject(t.x, t.y);
+    if (t.x === G.player.x && t.y === G.player.y) drawPlayer();
+  }
+
+  drawParticles();
+  renderMinimap();
+}
+
+// ===== MINIMAP =====
+function renderMinimap() {
+  const s = 90 / MAP_W;
+  mmCtx.fillStyle = '#0d0d2a';
+  mmCtx.fillRect(0, 0, 90, 90);
+  for (let y = 0; y < MAP_H; y++) {
+    for (let x = 0; x < MAP_W; x++) {
+      const type = G.map[y][x];
+      const colors = { grass:'#4a7c45',dirt:'#8b6548',water:'#2a6090',sand:'#c8a84b',rock:'#666',snow:'#c8d8e8',forest:'#2d5a27',path:'#a09060' };
+      mmCtx.fillStyle = colors[type] || '#555';
+      mmCtx.fillRect(x * s, y * s, s, s);
+      if (G.buildings[`${x},${y}`]) {
+        mmCtx.fillStyle = '#f0c040';
+        mmCtx.fillRect(x*s, y*s, s, s);
+      }
+    }
+  }
+  // player dot
+  mmCtx.fillStyle = '#a060ff';
+  mmCtx.beginPath();
+  mmCtx.arc(G.player.x * s + s/2, G.player.y * s + s/2, 3, 0, Math.PI*2);
+  mmCtx.fill();
+}
+
+// ===== MOVEMENT =====
+function canWalk(x, y) {
+  if (x < 0 || x >= MAP_W || y < 0 || y >= MAP_H) return false;
+  return G.map[y][x] !== 'water';
+}
+
+function movePlayer(dx, dy) {
+  const nx = G.player.x + dx, ny = G.player.y + dy;
+  if (!canWalk(nx, ny)) {
+    showTooltip('🌊 Туда не пройти!'); return;
+  }
+  if (G.tool === 'gather') {
+    const key = `${nx},${ny}`;
+    const obj = G.objects[key];
+    if (obj && OBJECTS[obj].resource && !G.gatheredObjects[key]) {
+      gatherObject(nx, ny); return;
+    }
+  }
+  G.player.x = nx; G.player.y = ny;
+  document.getElementById('hud-pos').textContent = `${nx}, ${ny}`;
+  saveState();
+}
+
+function gatherObject(tx, ty) {
+  const key = `${tx},${ty}`;
+  const obj = G.objects[key];
+  if (!obj || G.gatheredObjects[key]) return;
+  const def = OBJECTS[obj];
+  if (!def.resource) { showTooltip(`${def.emoji} Красиво, но не полезно`); return; }
+  G.resources[def.resource] = (G.resources[def.resource] || 0) + def.amount;
+  G.gatheredObjects[key] = true;
+  spawnParticles(tx, ty, def.emoji);
+  updateResourceHUD();
+  showTooltip(`+${def.amount} ${def.label}!`);
+  saveState();
+}
+
+function placeBuilding(tx, ty) {
+  if (!canWalk(tx, ty)) { showTooltip('🚫 Нельзя здесь строить'); return; }
+  const key = `${tx},${ty}`;
+  if (G.buildings[key]) { showTooltip('🏗 Здесь уже что-то есть'); return; }
+  if (G.objects[key] && !G.gatheredObjects[key]) {
+    showTooltip('🌲 Сначала расчисти место'); return;
+  }
+  G.buildings[key] = G.selectedBuild;
+  spawnParticles(tx, ty, BUILDINGS[G.selectedBuild].emoji);
+  showTooltip(`${BUILDINGS[G.selectedBuild].emoji} ${BUILDINGS[G.selectedBuild].label} построен!`);
+  saveState();
+}
+
+function updateResourceHUD() {
+  document.getElementById('res-wood').textContent = G.resources.wood || 0;
+  document.getElementById('res-stone').textContent = G.resources.stone || 0;
+  document.getElementById('res-food').textContent = G.resources.food || 0;
+}
+
+// ===== TOOLTIP =====
+let tooltipTimer = null;
+function showTooltip(msg) {
+  const el = document.getElementById('tooltip');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(tooltipTimer);
+  tooltipTimer = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+// ===== TOOL SELECTION =====
+function setTool(tool) {
+  G.tool = tool;
+  document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tool-' + tool).classList.add('active');
+  const bm = document.getElementById('build-menu');
+  if (tool === 'build') bm.classList.add('open');
+  else bm.classList.remove('open');
+  if (tool === 'gather') showTooltip('⛏️ Нажми на тайл рядом с ресурсом');
+  if (tool === 'move') showTooltip('🚶 Нажми на тайл чтобы переместиться');
+  if (tool === 'info') showTooltip('🗺️ Свайп для просмотра карты');
+}
+
+function selectBuild(type) {
+  G.selectedBuild = type;
+  document.querySelectorAll('.build-item').forEach(b => b.classList.remove('selected'));
+  document.querySelector(`[data-build="${type}"]`).classList.add('selected');
+  showTooltip(`${BUILDINGS[type].emoji} Выбрано: ${BUILDINGS[type].label}`);
+}
+
+// ===== INPUT =====
+// D-PAD
+const dirs = { 'dp-up': [-1,-1], 'dp-down': [1,1], 'dp-left': [-1,1], 'dp-right': [1,-1] };
+// actually isometric directions
+const isoDirs = { 'dp-up': [0,-1], 'dp-down': [0,1], 'dp-left': [-1,0], 'dp-right': [1,0] };
+
+Object.entries(isoDirs).forEach(([id, [dx,dy]]) => {
+  const btn = document.getElementById(id);
+  let interval = null;
+  const start = () => {
+    btn.classList.add('pressed');
+    movePlayer(dx, dy);
+    interval = setInterval(() => movePlayer(dx, dy), 160);
+  };
+  const stop = () => {
+    btn.classList.remove('pressed');
+    clearInterval(interval);
+  };
+  btn.addEventListener('touchstart', e => { e.preventDefault(); start(); }, { passive: false });
+  btn.addEventListener('touchend', stop);
+  btn.addEventListener('mousedown', start);
+  btn.addEventListener('mouseup', stop);
+  btn.addEventListener('mouseleave', stop);
+});
+
+// Keyboard
+const keys = {};
+window.addEventListener('keydown', e => { keys[e.key] = true; });
+window.addEventListener('keyup', e => { keys[e.key] = false; });
+let keyMoveTimer = 0;
+
+// Canvas tap
+let lastTap = 0;
+canvas.addEventListener('touchstart', e => {
+  const touch = e.touches[0];
+  G.lastMouse = { x: touch.clientX, y: touch.clientY };
+}, { passive: true });
+
+canvas.addEventListener('touchend', e => {
+  const touch = e.changedTouches[0];
+  const now = Date.now();
+  const t = screenToTile(touch.clientX, touch.clientY);
+  if (t.x < 0 || t.x >= MAP_W || t.y < 0 || t.y >= MAP_H) return;
+
+  if (G.tool === 'move') {
+    // walk toward tapped tile (simple 1-step)
+    const dx = Math.sign(t.x - G.player.x);
+    const dy = Math.sign(t.y - G.player.y);
+    if (dx !== 0 || dy !== 0) {
+      if (dx !== 0 && dy !== 0) {
+        if (Math.abs(t.x - G.player.x) >= Math.abs(t.y - G.player.y)) movePlayer(dx, 0);
+        else movePlayer(0, dy);
+      } else movePlayer(dx, dy);
+    }
+  } else if (G.tool === 'gather') {
+    const key = `${t.x},${t.y}`;
+    if (G.objects[key] && !G.gatheredObjects[key]) gatherObject(t.x, t.y);
+    else showTooltip('Здесь нечего добывать');
+  } else if (G.tool === 'build') {
+    placeBuilding(t.x, t.y);
+  }
+  lastTap = now;
+}, { passive: true });
+
+canvas.addEventListener('mousemove', e => {
+  G.lastMouse = { x: e.clientX, y: e.clientY };
+});
+canvas.addEventListener('click', e => {
+  const t = screenToTile(e.clientX, e.clientY);
+  if (t.x < 0 || t.x >= MAP_W || t.y < 0 || t.y >= MAP_H) return;
+  if (G.tool === 'move') {
+    const dx = Math.sign(t.x - G.player.x), dy = Math.sign(t.y - G.player.y);
+    if (dx !== 0 && dy !== 0) {
+      if (Math.abs(t.x-G.player.x) >= Math.abs(t.y-G.player.y)) movePlayer(dx,0);
+      else movePlayer(0,dy);
+    } else movePlayer(dx,dy);
+  } else if (G.tool === 'gather') {
+    gatherObject(t.x, t.y);
+  } else if (G.tool === 'build') {
+    placeBuilding(t.x, t.y);
+  }
+});
+
+// ===== GAME LOOP =====
+let last = 0;
+function loop(ts) {
+  const dt = Math.min((ts - last) / 16.67, 3);
+  last = ts;
+
+  G.anim.playerBob += 0.07 * dt;
+  G.anim.waterAnim += 0.04 * dt;
+
+  // keyboard movement
+  keyMoveTimer -= dt;
+  if (keyMoveTimer <= 0) {
+    let dx = 0, dy = 0;
+    if (keys['ArrowUp'] || keys['w'] || keys['W']) { dx=-1; }
+    if (keys['ArrowDown'] || keys['s'] || keys['S']) { dx=1; }
+    if (keys['ArrowLeft'] || keys['a'] || keys['A']) { dy=-1; }
+    if (keys['ArrowRight'] || keys['d'] || keys['D']) { dy=1; }
+    if (dx || dy) { movePlayer(dx, dy); keyMoveTimer = 8; }
+  }
+
+  targetCamera();
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ===== INIT =====
+updateResourceHUD();
+document.getElementById('hud-pos').textContent = `${G.player.x}, ${G.player.y}`;
+showTooltip('👋 Добро пожаловать в IsoWorld!');
+requestAnimationFrame(loop);
+</script>
+
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+</script>
+</body>
+</html>
